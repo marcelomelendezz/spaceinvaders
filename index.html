@@ -6,49 +6,103 @@
 <title>SOMOS · Space Invaders</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; overflow:hidden; font-family:'Courier New',monospace; user-select:none; }
-  #hud { display:flex; justify-content:space-between; width:100%; padding:4px 10px; font-size:11px; color:#00ff41; letter-spacing:1px; flex-shrink:0; }
+  html, body {
+    width:100%; height:100%;
+    background:#000;
+    overflow:hidden;
+    font-family:'Courier New',monospace;
+    user-select:none;
+  }
+  #wrap {
+    display:flex;
+    flex-direction:column;
+    width:100%;
+    height:100%;
+  }
+  #hud {
+    flex-shrink:0;
+    display:flex;
+    justify-content:space-between;
+    padding:3px 8px;
+    font-size:10px;
+    color:#00ff41;
+    letter-spacing:1px;
+    background:#000;
+  }
   #hud span { color:#fff; }
-  #controls { display:flex; align-items:center; justify-content:center; width:100%; padding:4px 12px; flex-shrink:0; }
-  .ctrl-group { display:flex; flex-direction:column; align-items:center; gap:5px; }
+  #canvasWrap {
+    flex:1;
+    min-height:0;
+    position:relative;
+    background:#000;
+  }
+  canvas {
+    display:block;
+    width:100%;
+    height:100%;
+    background:#000;
+    touch-action:none;
+  }
+  #controls {
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:3px 12px 4px;
+    background:#000;
+  }
+  .ctrl-group { display:flex; flex-direction:column; align-items:center; gap:4px; }
   .arrow-row { display:flex; gap:6px; }
-  .btn { background:#001a00; border:2px solid #00ff41; color:#00ff41; font-family:'Courier New',monospace; font-size:20px; font-weight:bold; width:54px; height:46px; cursor:pointer; border-radius:6px; display:flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  .btn {
+    background:#001a00; border:2px solid #00ff41; color:#00ff41;
+    font-family:'Courier New',monospace; font-size:18px; font-weight:bold;
+    width:50px; height:40px; cursor:pointer; border-radius:6px;
+    display:flex; align-items:center; justify-content:center;
+    -webkit-tap-highlight-color:transparent; touch-action:manipulation;
+  }
   .btn.pressed,.btn:active { background:#00ff41; color:#000; }
-  .btn-fire { background:#1a0000; border-color:#ff4444; color:#ff4444; width:114px; font-size:12px; letter-spacing:1px; }
+  .btn-fire {
+    background:#1a0000; border-color:#ff4444; color:#ff4444;
+    width:106px; font-size:11px; letter-spacing:1px;
+  }
   .btn-fire.pressed,.btn-fire:active { background:#ff4444; color:#000; }
-  canvas { display:block; background:#000; touch-action:none; flex-shrink:0; }
 </style>
 </head>
 <body>
-<div id="hud">
-  <div>SCORE: <span id="scoreVal">0</span></div>
-  <div>LIVES: <span id="livesVal">III</span></div>
-  <div>LVL: <span id="levelVal">1</span></div>
-</div>
-<canvas id="c"></canvas>
-<div id="controls">
-  <div class="ctrl-group">
-    <button class="btn btn-fire" id="btnFire">FIRE</button>
-    <div class="arrow-row">
-      <button class="btn" id="btnL">&#9664;</button>
-      <button class="btn" id="btnR">&#9654;</button>
+<div id="wrap">
+  <div id="hud">
+    <div>SCORE: <span id="scoreVal">0</span></div>
+    <div>LIVES: <span id="livesVal">III</span></div>
+    <div>LVL: <span id="levelVal">1</span></div>
+  </div>
+  <div id="canvasWrap">
+    <canvas id="c"></canvas>
+  </div>
+  <div id="controls">
+    <div class="ctrl-group">
+      <button class="btn btn-fire" id="btnFire">FIRE</button>
+      <div class="arrow-row">
+        <button class="btn" id="btnL">&#9664;</button>
+        <button class="btn" id="btnR">&#9654;</button>
+      </div>
     </div>
   </div>
 </div>
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const HUD_H = 28;
-const CTRL_H = 110;
+const canvasWrap = document.getElementById('canvasWrap');
 
+// Usar el tamaño REAL del contenedor, no window
 function resize() {
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-  canvas.width  = Math.min(600, W);
-  // Calcular altura real disponible para el canvas
-  canvas.height = Math.max(200, H - HUD_H - CTRL_H);
+  canvas.width  = canvasWrap.clientWidth  || canvasWrap.offsetWidth  || 300;
+  canvas.height = canvasWrap.clientHeight || canvasWrap.offsetHeight || 300;
 }
-resize();
+
+// Esperar a que el DOM esté completamente pintado
+window.addEventListener('load', () => {
+  setTimeout(() => { resize(); init(); draw(); }, 100);
+});
 window.addEventListener('resize', () => { resize(); if (!running) draw(); });
 
 // SPRITES
@@ -62,7 +116,11 @@ const SPLR=[[0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0],
 const ISPRITES=[[SA1,SA2],[SB1,SB2],[SC1,SC2]];
 const ICOLORS=['#ff6b6b','#ff6b6b','#ffdd57','#ffdd57','#00d4ff','#00d4ff'];
 const PTS=[30,20,10];
-const SC3=3, IW=8*SC3, IH=8*SC3, IPADX=14, IPADY=12;
+
+// Escala dinámica basada en el tamaño real del canvas
+function getScale() {
+  return Math.max(1, Math.floor(canvas.width / 120));
+}
 
 function drawSprite(spr,x,y,sc,col){
   ctx.fillStyle=col;
@@ -71,55 +129,47 @@ function drawSprite(spr,x,y,sc,col){
       if(spr[r][c]) ctx.fillRect(Math.floor(x+c*sc),Math.floor(y+r*sc),sc,sc);
 }
 
-// STATE
-let score=0, lives=3, level=1, running=false, gameOver=false, started=false;
-let player, bullets, invaders, eBullets, particles;
-let invDir=1, aFrame=0;
+let score=0,lives=3,level=1,running=false,gameOver=false,started=false;
+let player,bullets,invaders,eBullets,particles;
+let invDir=1,aFrame=0;
 let keys={};
-let gameInterval=null, drawInterval=null;
+let gameInterval=null,drawInterval=null;
 const TICK_MS=16;
-let INV_SPEED, BULLET_SPEED, EBULLET_SPEED, PLAYER_SPEED;
-let shootCounter=0, shootEvery=90;
-let animCounter=0, animEvery=28;
+let INV_SPEED,BULLET_SPEED,EBULLET_SPEED,PLAYER_SPEED;
+let shootCounter=0,shootEvery=90,animCounter=0,animEvery=28;
 
 function init(){score=0;lives=3;level=1;gameOver=false;updateHUD();initLevel();}
 
 function initLevel(){
-  const W=canvas.width, H=canvas.height;
+  const SC = getScale();
+  const IW = 8*SC, IH = 8*SC, IPADX = SC*5, IPADY = SC*4;
+  const W = canvas.width, H = canvas.height;
 
-  // Jugador en la parte baja del canvas con margen seguro
-  const playerY = H - 36;
+  const playerH = 8*SC;
+  const playerY = H - playerH - 8;
+  player = {x:W/2-8*SC, y:playerY, w:16*SC, h:playerH, cd:0, SC};
 
-  player={x:W/2-8*SC3, y:playerY, w:16*SC3, h:8*SC3, cd:0};
   bullets=[]; eBullets=[]; particles=[]; invaders=[];
   invDir=1; aFrame=0; shootCounter=0; animCounter=0;
 
-  INV_SPEED    = 0.7 + level*0.12;
-  BULLET_SPEED = 5;
-  EBULLET_SPEED= 1.8 + level*0.25;
-  PLAYER_SPEED = 3;
+  INV_SPEED    = 0.6 + level*0.1;
+  BULLET_SPEED = 4;
+  EBULLET_SPEED= 1.5 + level*0.2;
+  PLAYER_SPEED = 2.5;
   shootEvery   = Math.max(30, 85-level*8);
 
-  const cols=11, rows=Math.min(4+Math.floor((level-1)/2),5);
-  const totalW=cols*(IW+IPADX)-IPADX;
-  const sx=(W-totalW)/2;
+  // Adaptar filas y columnas al tamaño real del canvas
+  const cols = Math.min(11, Math.floor(W / (IW + IPADX)));
+  const rows  = Math.min(4, Math.floor((H * 0.45) / (IH + IPADY)));
 
-  // Las naves empiezan en Y=40, con espacio suficiente
-  // Verificamos que caben sin tocar al jugador desde el inicio
-  const invStartY = 40;
-  const invEndY   = invStartY + rows*(IH+IPADY);
-  // Debe haber al menos 120px entre las naves y el jugador
-  const safeGap   = playerY - invEndY;
-  const extraY    = safeGap < 120 ? 0 : 0; // si no caben, igual arrancamos
+  const totalW = cols*(IW+IPADX) - IPADX;
+  const sx = (W - totalW) / 2;
+  const startY = 10;
 
   for(let r=0;r<rows;r++){
     const type=r<1?0:r<3?1:2;
     for(let c=0;c<cols;c++)
-      invaders.push({
-        x: sx+c*(IW+IPADX),
-        y: invStartY + r*(IH+IPADY),
-        w:IW, h:IH, type, row:r, col:c, alive:true
-      });
+      invaders.push({x:sx+c*(IW+IPADX), y:startY+r*(IH+IPADY), w:IW, h:IH, type, row:r, col:c, alive:true, IW, IH});
   }
   updateHUD();
 }
@@ -130,16 +180,13 @@ function updateHUD(){
   document.getElementById('livesVal').textContent='I'.repeat(Math.max(0,lives));
 }
 
-// BUTTONS
 function setupMove(id,key){
   const btn=document.getElementById(id);
-  const on =()=>{keys[key]=true; btn.classList.add('pressed');};
+  const on=()=>{keys[key]=true;btn.classList.add('pressed');};
   const off=()=>{keys[key]=false;btn.classList.remove('pressed');};
-  btn.addEventListener('mousedown',on);
-  btn.addEventListener('mouseup',off);
-  btn.addEventListener('mouseleave',off);
+  btn.addEventListener('mousedown',on); btn.addEventListener('mouseup',off); btn.addEventListener('mouseleave',off);
   btn.addEventListener('touchstart',e=>{e.preventDefault();on();},{passive:false});
-  btn.addEventListener('touchend',  e=>{e.preventDefault();off();},{passive:false});
+  btn.addEventListener('touchend',e=>{e.preventDefault();off();},{passive:false});
   btn.addEventListener('touchcancel',e=>{e.preventDefault();off();},{passive:false});
 }
 setupMove('btnL','ArrowLeft');
@@ -160,87 +207,62 @@ canvas.addEventListener('click',()=>{
   else if(gameOver){init();started=true;running=true;startLoop();}
 });
 
-function startLoop(){
-  stopLoop();
-  gameInterval=setInterval(update, TICK_MS);
-  drawInterval =setInterval(draw,   TICK_MS);
-}
-function stopLoop(){
-  if(gameInterval)clearInterval(gameInterval);
-  if(drawInterval) clearInterval(drawInterval);
-  gameInterval=null; drawInterval=null;
-}
+function startLoop(){stopLoop();gameInterval=setInterval(update,TICK_MS);drawInterval=setInterval(draw,TICK_MS);}
+function stopLoop(){clearInterval(gameInterval);clearInterval(drawInterval);gameInterval=null;drawInterval=null;}
 
 function update(){
   if(!running)return;
-  const W=canvas.width, H=canvas.height;
-
+  const W=canvas.width,H=canvas.height;
   animCounter++; if(animCounter>=animEvery){animCounter=0;aFrame=1-aFrame;}
 
-  // Player move
-  if(keys['ArrowLeft'] ||keys['KeyA']) player.x-=PLAYER_SPEED;
-  if(keys['ArrowRight']||keys['KeyD']) player.x+=PLAYER_SPEED;
+  if(keys['ArrowLeft']||keys['KeyA'])player.x-=PLAYER_SPEED;
+  if(keys['ArrowRight']||keys['KeyD'])player.x+=PLAYER_SPEED;
   player.x=Math.max(0,Math.min(W-player.w,player.x));
   if(player.cd>0)player.cd--;
 
-  // Player bullets
   bullets=bullets.filter(b=>b.y>-10);
   bullets.forEach(b=>b.y-=BULLET_SPEED);
 
-  // Invaders
   const alive=invaders.filter(i=>i.alive);
   if(alive.length===0){level++;document.getElementById('levelVal').textContent=level;initLevel();return;}
 
-  const speedMult=1+(1-alive.length/(11*5))*1.2;
+  const speedMult=1+(1-alive.length/(11*4))*1.2;
   alive.forEach(inv=>inv.x+=invDir*INV_SPEED*speedMult);
 
   const lx=Math.min(...alive.map(i=>i.x));
   const rx=Math.max(...alive.map(i=>i.x+i.w));
-  if(rx>=W-2||lx<=2){
-    invDir*=-1;
-    alive.forEach(inv=>inv.y+=12);
-  }
+  if(rx>=W-2||lx<=2){invDir*=-1;alive.forEach(inv=>inv.y+=player.h*0.6);}
 
-  // Game over solo si las naves tocan la línea de muerte (30px arriba del jugador)
-  const deathLine = player.y - 30;
-  if(alive.some(inv=>inv.y+inv.h >= deathLine)){loseLife();return;}
+  // Game over si naves tocan al jugador
+  if(alive.some(inv=>inv.y+inv.h>=player.y)){loseLife();return;}
 
-  // Enemy shoot
-  shootCounter++; if(shootCounter>=shootEvery){
+  shootCounter++;
+  if(shootCounter>=shootEvery){
     shootCounter=0;
     const byCol={};
     alive.forEach(inv=>{if(!byCol[inv.col]||inv.y>byCol[inv.col].y)byCol[inv.col]=inv;});
     const shooters=Object.values(byCol);
-    if(shooters.length>0){
-      const s=shooters[Math.floor(Math.random()*shooters.length)];
-      eBullets.push({x:s.x+s.w/2,y:s.y+s.h,phase:0});
-    }
+    if(shooters.length>0){const s=shooters[Math.floor(Math.random()*shooters.length)];eBullets.push({x:s.x+s.w/2,y:s.y+s.h,phase:0});}
   }
 
   eBullets=eBullets.filter(b=>b.y<H+10);
   eBullets.forEach(b=>{b.y+=EBULLET_SPEED;b.phase+=0.3;});
 
-  // Bullet vs invader
   for(let bi=bullets.length-1;bi>=0;bi--){
     const b=bullets[bi];
     for(let ii=0;ii<invaders.length;ii++){
       const inv=invaders[ii]; if(!inv.alive)continue;
       if(b.x>=inv.x&&b.x<=inv.x+inv.w&&b.y>=inv.y&&b.y<=inv.y+inv.h){
-        inv.alive=false; bullets.splice(bi,1);
-        score+=PTS[inv.type]*level;
+        inv.alive=false;bullets.splice(bi,1);score+=PTS[inv.type]*level;
         document.getElementById('scoreVal').textContent=score;
-        blast(inv.x+inv.w/2,inv.y+inv.h/2,ICOLORS[Math.min(inv.row,5)]);
-        break;
+        blast(inv.x+inv.w/2,inv.y+inv.h/2,ICOLORS[Math.min(inv.row,5)]);break;
       }
     }
   }
 
-  // Enemy bullet vs player
   for(let bi=eBullets.length-1;bi>=0;bi--){
     const b=eBullets[bi];
-    if(b.x>=player.x&&b.x<=player.x+player.w&&b.y>=player.y&&b.y<=player.y+player.h){
-      eBullets.splice(bi,1);loseLife();return;
-    }
+    if(b.x>=player.x&&b.x<=player.x+player.w&&b.y>=player.y&&b.y<=player.y+player.h){eBullets.splice(bi,1);loseLife();return;}
   }
 
   particles=particles.filter(p=>p.life>0);
@@ -248,82 +270,62 @@ function update(){
 }
 
 function shoot(){if(player.cd>0)return;bullets.push({x:player.x+player.w/2,y:player.y});player.cd=18;}
-function blast(x,y,color){for(let i=0;i<10;i++){const a=Math.PI*2*i/10,sp=1+Math.random()*2;particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:20+Math.random()*10,color,size:2+Math.floor(Math.random()*3)});}}
-
-function loseLife(){
-  lives--;
-  if(lives<=0){running=false;gameOver=true;stopLoop();updateHUD();draw();return;}
-  bullets=[];eBullets=[];
-  player.x=canvas.width/2-player.w/2;
-  updateHUD();
-}
+function blast(x,y,color){for(let i=0;i<10;i++){const a=Math.PI*2*i/10,sp=1+Math.random()*2;particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:20+Math.random()*10,color,size:2+Math.floor(Math.random()*2)});}}
+function loseLife(){lives--;if(lives<=0){running=false;gameOver=true;stopLoop();updateHUD();draw();return;}bullets=[];eBullets=[];player.x=canvas.width/2-player.w/2;updateHUD();}
 
 function draw(){
   const W=canvas.width,H=canvas.height;
   ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
 
-  // Stars
-  for(let i=0;i<80;i++){
-    ctx.fillStyle=i%4===0?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.35)';
-    ctx.fillRect((i*173+7)%W,(i*113+19)%H,i%4===0?2:1,i%4===0?2:1);
+  for(let i=0;i<60;i++){
+    ctx.fillStyle=i%4===0?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.3)';
+    ctx.fillRect((i*173+7)%W,(i*113+19)%H,1,1);
   }
 
-  // Invaders
   invaders.filter(i=>i.alive).forEach(inv=>{
+    const SC=player.SC||getScale();
     const[s1,s2]=ISPRITES[inv.type];
-    drawSprite(aFrame===0?s1:s2,inv.x,inv.y,SC3,ICOLORS[Math.min(inv.row,5)]);
+    drawSprite(aFrame===0?s1:s2,inv.x,inv.y,SC,ICOLORS[Math.min(inv.row,5)]);
   });
 
-  // Player
-  if(started&&!gameOver) drawSprite(SPLR,player.x,player.y,SC3,'#00ff41');
+  if(started&&!gameOver) drawSprite(SPLR,player.x,player.y,player.SC||getScale(),'#00ff41');
 
-  // Player bullets
-  ctx.fillStyle='#00ff41';ctx.shadowColor='#00ff41';ctx.shadowBlur=6;
-  bullets.forEach(b=>ctx.fillRect(b.x-2,b.y,4,12));
-  ctx.shadowBlur=0;
+  ctx.fillStyle='#00ff41';ctx.shadowColor='#00ff41';ctx.shadowBlur=4;
+  bullets.forEach(b=>ctx.fillRect(b.x-1,b.y,3,8));ctx.shadowBlur=0;
 
-  // Enemy bullets
-  ctx.fillStyle='#ff4444';ctx.shadowColor='#ff4444';ctx.shadowBlur=4;
-  eBullets.forEach(b=>ctx.fillRect(b.x+Math.sin(b.phase)*3-2,b.y,4,8));
-  ctx.shadowBlur=0;
+  ctx.fillStyle='#ff4444';ctx.shadowColor='#ff4444';ctx.shadowBlur=3;
+  eBullets.forEach(b=>ctx.fillRect(b.x+Math.sin(b.phase)*2-1,b.y,3,6));ctx.shadowBlur=0;
 
-  // Particles
-  particles.forEach(p=>{
-    ctx.globalAlpha=Math.max(0,p.life/30);
-    ctx.fillStyle=p.color;
-    ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
-  });
+  particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/30);ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);});
   ctx.globalAlpha=1;
 
-  // Bottom line
-  ctx.fillStyle='#00ff41';ctx.fillRect(0,H-16,W,2);
+  ctx.fillStyle='#00ff41';ctx.fillRect(0,H-4,W,2);
 
-  // Overlays
   if(!started) overlay('SPACE INVADERS','PRESS FIRE TO START','#00ff41');
   else if(gameOver){
-    overlay('GAME OVER','SCORE: '+score+'   LVL: '+level,'#ff4444');
-    ctx.fillStyle=Math.floor(Date.now()/500)%2===0?'#ffdd57':'rgba(0,0,0,0)';
-    ctx.font=Math.floor(W/44)+"px 'Courier New'";
-    ctx.textAlign='center';
-    ctx.fillText('PRESS FIRE TO PLAY AGAIN',W/2,H/2+65);
-    ctx.textAlign='left';
+    overlay('GAME OVER','SCORE: '+score,'#ff4444');
+    if(Math.floor(Date.now()/500)%2===0){
+      ctx.fillStyle='#ffdd57';
+      ctx.font=Math.max(8,Math.floor(W/36))+"px 'Courier New'";
+      ctx.textAlign='center';
+      ctx.fillText('PRESS FIRE TO PLAY AGAIN',W/2,H*0.72);
+      ctx.textAlign='left';
+    }
   }
 }
 
 function overlay(title,sub,color){
   const W=canvas.width,H=canvas.height;
-  ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,W,H);
   ctx.fillStyle=color;
-  ctx.font="bold "+Math.floor(W/18)+"px 'Courier New'";
+  ctx.font="bold "+Math.max(10,Math.floor(W/16))+"px 'Courier New'";
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(title,W/2,H/2-25);
+  ctx.fillText(title,W/2,H*0.42);
   ctx.fillStyle='#aaa';
-  ctx.font=Math.floor(W/38)+"px 'Courier New'";
-  ctx.fillText(sub,W/2,H/2+15);
+  ctx.font=Math.max(8,Math.floor(W/32))+"px 'Courier New'";
+  ctx.fillText(sub,W/2,H*0.58);
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
 }
-
-init();draw();
 </script>
 </body>
 </html>
