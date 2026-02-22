@@ -7,16 +7,16 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; overflow:hidden; font-family:'Courier New',monospace; user-select:none; }
-  #hud { display:flex; justify-content:space-between; width:100%; padding:4px 10px; font-size:11px; color:#00ff41; letter-spacing:1px; }
+  #hud { display:flex; justify-content:space-between; width:100%; padding:4px 10px; font-size:11px; color:#00ff41; letter-spacing:1px; flex-shrink:0; }
   #hud span { color:#fff; }
-  canvas { display:block; background:#000; touch-action:none; }
-  #controls { display:flex; align-items:center; justify-content:center; width:100%; padding:4px 12px; }
+  #controls { display:flex; align-items:center; justify-content:center; width:100%; padding:4px 12px; flex-shrink:0; }
   .ctrl-group { display:flex; flex-direction:column; align-items:center; gap:5px; }
   .arrow-row { display:flex; gap:6px; }
   .btn { background:#001a00; border:2px solid #00ff41; color:#00ff41; font-family:'Courier New',monospace; font-size:20px; font-weight:bold; width:54px; height:46px; cursor:pointer; border-radius:6px; display:flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
   .btn.pressed,.btn:active { background:#00ff41; color:#000; }
   .btn-fire { background:#1a0000; border-color:#ff4444; color:#ff4444; width:114px; font-size:12px; letter-spacing:1px; }
   .btn-fire.pressed,.btn-fire:active { background:#ff4444; color:#000; }
+  canvas { display:block; background:#000; touch-action:none; flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -36,66 +36,90 @@
   </div>
 </div>
 <script>
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-function resize(){const W=window.innerWidth,H=window.innerHeight-90;canvas.width=Math.min(600,W);canvas.height=Math.max(180,H);}
-resize();window.addEventListener('resize',()=>{resize();if(!running)draw();});
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const HUD_H = 28;
+const CTRL_H = 110;
+
+function resize() {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  canvas.width  = Math.min(600, W);
+  // Calcular altura real disponible para el canvas
+  canvas.height = Math.max(200, H - HUD_H - CTRL_H);
+}
+resize();
+window.addEventListener('resize', () => { resize(); if (!running) draw(); });
 
 // SPRITES
 const SA1=[[0,0,1,0,0,0,1,0],[0,0,0,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,1,0,1,1,0,1,0],[1,0,0,0,0,0,0,1],[0,1,0,0,0,0,1,0]];
 const SA2=[[0,0,1,0,0,0,1,0],[1,0,0,1,1,1,0,1],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0],[1,0,1,0,0,1,0,1]];
 const SB1=[[0,0,0,1,1,0,0,0],[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0],[1,0,1,0,0,1,0,1]];
 const SB2=[[0,0,0,1,1,0,0,0],[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,1,0,1,1,0,1,0],[1,0,0,0,0,0,0,1],[0,1,0,0,0,0,1,0]];
-const SC1=[[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,0,0,1,1,0,0,0],[0,0,1,0,0,1,0,00],[0,1,0,0,0,0,1,0]];
+const SC1=[[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,0,0,1,1,0,0,0],[0,0,1,0,0,1,0,0],[0,1,0,0,0,0,1,0]];
 const SC2=[[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,0,1,1,0,1,1],[1,1,1,1,1,1,1,1],[0,1,0,1,1,0,1,0],[1,0,1,0,0,1,0,1],[0,0,1,0,0,1,0,0]];
 const SPLR=[[0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0],[0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,1],[1,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1]];
 const ISPRITES=[[SA1,SA2],[SB1,SB2],[SC1,SC2]];
 const ICOLORS=['#ff6b6b','#ff6b6b','#ffdd57','#ffdd57','#00d4ff','#00d4ff'];
 const PTS=[30,20,10];
-const SC3=3,IW=8*SC3,IH=8*SC3,IPADX=14,IPADY=12;
+const SC3=3, IW=8*SC3, IH=8*SC3, IPADX=14, IPADY=12;
 
 function drawSprite(spr,x,y,sc,col){
   ctx.fillStyle=col;
   for(let r=0;r<spr.length;r++)
     for(let c=0;c<spr[r].length;c++)
-      if(spr[r][c])ctx.fillRect(Math.floor(x+c*sc),Math.floor(y+r*sc),sc,sc);
+      if(spr[r][c]) ctx.fillRect(Math.floor(x+c*sc),Math.floor(y+r*sc),sc,sc);
 }
 
 // STATE
-let score=0,lives=3,level=1,running=false,gameOver=false,started=false;
-let player,bullets,invaders,eBullets,particles;
-let invDir=1,aFrame=0;
+let score=0, lives=3, level=1, running=false, gameOver=false, started=false;
+let player, bullets, invaders, eBullets, particles;
+let invDir=1, aFrame=0;
 let keys={};
 let gameInterval=null, drawInterval=null;
-
-// Velocidades fijas por tick (NO dependen de FPS ni tiempo)
-// El juego corre a exactamente 60 ticks/seg con setInterval(16ms)
-// Así el iframe NO puede romperlo
-const TICK_MS = 16; // ~60fps fijo
+const TICK_MS=16;
 let INV_SPEED, BULLET_SPEED, EBULLET_SPEED, PLAYER_SPEED;
-let shootCounter=0, shootEvery=90; // cada N ticks dispara enemigo
-let animCounter=0, animEvery=28;   // cada N ticks cambia frame
+let shootCounter=0, shootEvery=90;
+let animCounter=0, animEvery=28;
 
 function init(){score=0;lives=3;level=1;gameOver=false;updateHUD();initLevel();}
 
 function initLevel(){
-  const W=canvas.width,H=canvas.height;
-  player={x:W/2-8*SC3,y:H-28,w:16*SC3,h:8*SC3,cd:0};
-  bullets=[];eBullets=[];particles=[];invaders=[];
-  invDir=1;aFrame=0;shootCounter=0;animCounter=0;
+  const W=canvas.width, H=canvas.height;
 
-  // Velocidades en px/tick (tick = 16ms fijo)
-  INV_SPEED   = 0.8 + level*0.15;  // px por tick
-  BULLET_SPEED  = 5.5;              // px por tick bala jugador
-  EBULLET_SPEED = 2.0 + level*0.3; // px por tick bala enemiga
-  PLAYER_SPEED  = 3.0;              // px por tick jugador
-  shootEvery = Math.max(35, 90 - level*8);
+  // Jugador en la parte baja del canvas con margen seguro
+  const playerY = H - 36;
 
-  const cols=11, rows=Math.min(4+Math.floor((level-1)/2),6);
-  const totalW=cols*(IW+IPADX)-IPADX, sx=(W-totalW)/2;
+  player={x:W/2-8*SC3, y:playerY, w:16*SC3, h:8*SC3, cd:0};
+  bullets=[]; eBullets=[]; particles=[]; invaders=[];
+  invDir=1; aFrame=0; shootCounter=0; animCounter=0;
+
+  INV_SPEED    = 0.7 + level*0.12;
+  BULLET_SPEED = 5;
+  EBULLET_SPEED= 1.8 + level*0.25;
+  PLAYER_SPEED = 3;
+  shootEvery   = Math.max(30, 85-level*8);
+
+  const cols=11, rows=Math.min(4+Math.floor((level-1)/2),5);
+  const totalW=cols*(IW+IPADX)-IPADX;
+  const sx=(W-totalW)/2;
+
+  // Las naves empiezan en Y=40, con espacio suficiente
+  // Verificamos que caben sin tocar al jugador desde el inicio
+  const invStartY = 40;
+  const invEndY   = invStartY + rows*(IH+IPADY);
+  // Debe haber al menos 120px entre las naves y el jugador
+  const safeGap   = playerY - invEndY;
+  const extraY    = safeGap < 120 ? 0 : 0; // si no caben, igual arrancamos
+
   for(let r=0;r<rows;r++){
     const type=r<1?0:r<3?1:2;
     for(let c=0;c<cols;c++)
-      invaders.push({x:sx+c*(IW+IPADX),y:28+r*(IH+IPADY),w:IW,h:IH,type,row:r,col:c,alive:true});
+      invaders.push({
+        x: sx+c*(IW+IPADX),
+        y: invStartY + r*(IH+IPADY),
+        w:IW, h:IH, type, row:r, col:c, alive:true
+      });
   }
   updateHUD();
 }
@@ -109,11 +133,13 @@ function updateHUD(){
 // BUTTONS
 function setupMove(id,key){
   const btn=document.getElementById(id);
-  const on=()=>{keys[key]=true;btn.classList.add('pressed');};
+  const on =()=>{keys[key]=true; btn.classList.add('pressed');};
   const off=()=>{keys[key]=false;btn.classList.remove('pressed');};
-  btn.addEventListener('mousedown',on); btn.addEventListener('mouseup',off); btn.addEventListener('mouseleave',off);
+  btn.addEventListener('mousedown',on);
+  btn.addEventListener('mouseup',off);
+  btn.addEventListener('mouseleave',off);
   btn.addEventListener('touchstart',e=>{e.preventDefault();on();},{passive:false});
-  btn.addEventListener('touchend',e=>{e.preventDefault();off();},{passive:false});
+  btn.addEventListener('touchend',  e=>{e.preventDefault();off();},{passive:false});
   btn.addEventListener('touchcancel',e=>{e.preventDefault();off();},{passive:false});
 }
 setupMove('btnL','ArrowLeft');
@@ -135,32 +161,25 @@ canvas.addEventListener('click',()=>{
 });
 
 function startLoop(){
-  // Usar setInterval fijo en lugar de requestAnimationFrame
-  // Así el iframe NO puede acumular frames ni hacer saltos
-  if(gameInterval) clearInterval(gameInterval);
-  if(drawInterval) clearInterval(drawInterval);
-  gameInterval = setInterval(update, TICK_MS);
-  drawInterval = setInterval(draw, TICK_MS);
+  stopLoop();
+  gameInterval=setInterval(update, TICK_MS);
+  drawInterval =setInterval(draw,   TICK_MS);
 }
-
 function stopLoop(){
-  clearInterval(gameInterval);
-  clearInterval(drawInterval);
+  if(gameInterval)clearInterval(gameInterval);
+  if(drawInterval) clearInterval(drawInterval);
   gameInterval=null; drawInterval=null;
 }
 
-// UPDATE — corre a ritmo fijo, sin delta, sin tiempo
 function update(){
   if(!running)return;
-  const W=canvas.width,H=canvas.height;
+  const W=canvas.width, H=canvas.height;
 
-  // Animación
-  animCounter++;
-  if(animCounter>=animEvery){animCounter=0;aFrame=1-aFrame;}
+  animCounter++; if(animCounter>=animEvery){animCounter=0;aFrame=1-aFrame;}
 
-  // Player
-  if(keys['ArrowLeft']||keys['KeyA'])player.x-=PLAYER_SPEED;
-  if(keys['ArrowRight']||keys['KeyD'])player.x+=PLAYER_SPEED;
+  // Player move
+  if(keys['ArrowLeft'] ||keys['KeyA']) player.x-=PLAYER_SPEED;
+  if(keys['ArrowRight']||keys['KeyD']) player.x+=PLAYER_SPEED;
   player.x=Math.max(0,Math.min(W-player.w,player.x));
   if(player.cd>0)player.cd--;
 
@@ -172,21 +191,22 @@ function update(){
   const alive=invaders.filter(i=>i.alive);
   if(alive.length===0){level++;document.getElementById('levelVal').textContent=level;initLevel();return;}
 
-  const speedMult=1+(1-alive.length/(11*6))*1.2;
+  const speedMult=1+(1-alive.length/(11*5))*1.2;
   alive.forEach(inv=>inv.x+=invDir*INV_SPEED*speedMult);
 
   const lx=Math.min(...alive.map(i=>i.x));
   const rx=Math.max(...alive.map(i=>i.x+i.w));
   if(rx>=W-2||lx<=2){
     invDir*=-1;
-    alive.forEach(inv=>inv.y+=14);
+    alive.forEach(inv=>inv.y+=12);
   }
 
-  if(alive.some(inv=>inv.y+inv.h>=player.y)){loseLife();return;}
+  // Game over solo si las naves tocan la línea de muerte (30px arriba del jugador)
+  const deathLine = player.y - 30;
+  if(alive.some(inv=>inv.y+inv.h >= deathLine)){loseLife();return;}
 
-  // Enemy shoot por contador de ticks
-  shootCounter++;
-  if(shootCounter>=shootEvery){
+  // Enemy shoot
+  shootCounter++; if(shootCounter>=shootEvery){
     shootCounter=0;
     const byCol={};
     alive.forEach(inv=>{if(!byCol[inv.col]||inv.y>byCol[inv.col].y)byCol[inv.col]=inv;});
@@ -204,10 +224,9 @@ function update(){
   for(let bi=bullets.length-1;bi>=0;bi--){
     const b=bullets[bi];
     for(let ii=0;ii<invaders.length;ii++){
-      const inv=invaders[ii];
-      if(!inv.alive)continue;
+      const inv=invaders[ii]; if(!inv.alive)continue;
       if(b.x>=inv.x&&b.x<=inv.x+inv.w&&b.y>=inv.y&&b.y<=inv.y+inv.h){
-        inv.alive=false;bullets.splice(bi,1);
+        inv.alive=false; bullets.splice(bi,1);
         score+=PTS[inv.type]*level;
         document.getElementById('scoreVal').textContent=score;
         blast(inv.x+inv.w/2,inv.y+inv.h/2,ICOLORS[Math.min(inv.row,5)]);
@@ -230,6 +249,7 @@ function update(){
 
 function shoot(){if(player.cd>0)return;bullets.push({x:player.x+player.w/2,y:player.y});player.cd=18;}
 function blast(x,y,color){for(let i=0;i<10;i++){const a=Math.PI*2*i/10,sp=1+Math.random()*2;particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:20+Math.random()*10,color,size:2+Math.floor(Math.random()*3)});}}
+
 function loseLife(){
   lives--;
   if(lives<=0){running=false;gameOver=true;stopLoop();updateHUD();draw();return;}
@@ -241,35 +261,64 @@ function loseLife(){
 function draw(){
   const W=canvas.width,H=canvas.height;
   ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+
   // Stars
-  for(let i=0;i<80;i++){ctx.fillStyle=i%4===0?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.35)';ctx.fillRect((i*173+7)%W,(i*113+19)%H,i%4===0?2:1,i%4===0?2:1);}
+  for(let i=0;i<80;i++){
+    ctx.fillStyle=i%4===0?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.35)';
+    ctx.fillRect((i*173+7)%W,(i*113+19)%H,i%4===0?2:1,i%4===0?2:1);
+  }
+
   // Invaders
-  invaders.filter(i=>i.alive).forEach(inv=>{const[s1,s2]=ISPRITES[inv.type];drawSprite(aFrame===0?s1:s2,inv.x,inv.y,SC3,ICOLORS[Math.min(inv.row,5)]);});
+  invaders.filter(i=>i.alive).forEach(inv=>{
+    const[s1,s2]=ISPRITES[inv.type];
+    drawSprite(aFrame===0?s1:s2,inv.x,inv.y,SC3,ICOLORS[Math.min(inv.row,5)]);
+  });
+
   // Player
-  if(started&&!gameOver)drawSprite(SPLR,player.x,player.y,SC3,'#00ff41');
-  // Bullets
-  ctx.fillStyle='#00ff41';ctx.shadowColor='#00ff41';ctx.shadowBlur=6;bullets.forEach(b=>ctx.fillRect(b.x-2,b.y,4,12));ctx.shadowBlur=0;
-  ctx.fillStyle='#ff4444';ctx.shadowColor='#ff4444';ctx.shadowBlur=4;eBullets.forEach(b=>ctx.fillRect(b.x+Math.sin(b.phase)*3-2,b.y,4,8));ctx.shadowBlur=0;
+  if(started&&!gameOver) drawSprite(SPLR,player.x,player.y,SC3,'#00ff41');
+
+  // Player bullets
+  ctx.fillStyle='#00ff41';ctx.shadowColor='#00ff41';ctx.shadowBlur=6;
+  bullets.forEach(b=>ctx.fillRect(b.x-2,b.y,4,12));
+  ctx.shadowBlur=0;
+
+  // Enemy bullets
+  ctx.fillStyle='#ff4444';ctx.shadowColor='#ff4444';ctx.shadowBlur=4;
+  eBullets.forEach(b=>ctx.fillRect(b.x+Math.sin(b.phase)*3-2,b.y,4,8));
+  ctx.shadowBlur=0;
+
   // Particles
-  particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/30);ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);});ctx.globalAlpha=1;
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life/30);
+    ctx.fillStyle=p.color;
+    ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+  });
+  ctx.globalAlpha=1;
+
   // Bottom line
   ctx.fillStyle='#00ff41';ctx.fillRect(0,H-16,W,2);
+
   // Overlays
-  if(!started)overlay('SPACE INVADERS','PRESS FIRE TO START','#00ff41');
+  if(!started) overlay('SPACE INVADERS','PRESS FIRE TO START','#00ff41');
   else if(gameOver){
     overlay('GAME OVER','SCORE: '+score+'   LVL: '+level,'#ff4444');
     ctx.fillStyle=Math.floor(Date.now()/500)%2===0?'#ffdd57':'rgba(0,0,0,0)';
-    ctx.font=Math.floor(W/44)+"px 'Courier New'";ctx.textAlign='center';
-    ctx.fillText('PRESS FIRE TO PLAY AGAIN',W/2,H/2+65);ctx.textAlign='left';
+    ctx.font=Math.floor(W/44)+"px 'Courier New'";
+    ctx.textAlign='center';
+    ctx.fillText('PRESS FIRE TO PLAY AGAIN',W/2,H/2+65);
+    ctx.textAlign='left';
   }
 }
 
 function overlay(title,sub,color){
   const W=canvas.width,H=canvas.height;
   ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,W,H);
-  ctx.fillStyle=color;ctx.font="bold "+Math.floor(W/18)+"px 'Courier New'";ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle=color;
+  ctx.font="bold "+Math.floor(W/18)+"px 'Courier New'";
+  ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText(title,W/2,H/2-25);
-  ctx.fillStyle='#aaa';ctx.font=Math.floor(W/38)+"px 'Courier New'";
+  ctx.fillStyle='#aaa';
+  ctx.font=Math.floor(W/38)+"px 'Courier New'";
   ctx.fillText(sub,W/2,H/2+15);
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
 }
