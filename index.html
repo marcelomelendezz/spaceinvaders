@@ -98,11 +98,6 @@ function resize() {
   canvas.height = canvasWrap.clientHeight || canvasWrap.offsetHeight || 300;
 }
 
-window.addEventListener('load', () => {
-  setTimeout(() => { resize(); init(); draw(); }, 100);
-});
-window.addEventListener('resize', () => { resize(); if (!running) draw(); });
-
 // SPRITES: esporas del jardín (orgánicas, dos frames de pulso bioluminiscente)
 const SPORE_A1=[[0,0,1,0,0,1,0,0],[0,1,0,1,1,0,1,0],[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[0,1,1,0,0,1,1,0],[0,1,0,1,1,0,1,0],[0,0,1,0,0,1,0,0]];
 const SPORE_A2=[[0,1,1,0,0,1,1,0],[0,1,0,1,1,0,1,0],[1,0,1,1,1,1,0,1],[0,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,1,0,1,1,0,1,0],[0,0,1,0,0,1,0,0]];
@@ -143,6 +138,15 @@ let gameInterval=null,drawInterval=null;
 const TICK_MS=16;
 let SPORE_SPEED,SEED_SPEED,BOLT_SPEED,GUARDIAN_SPEED;
 let boltCounter=0,boltEvery=90,pulseCounter=0,pulseEvery=28;
+let ready=false;
+
+function ensureReady(){
+  if(!ready){
+    resize();
+    init();
+    ready=true;
+  }
+}
 
 function init(){pollen=0;roots=3;roundNum=1;gameOver=false;updateHUD();initRound();}
 
@@ -156,7 +160,6 @@ function initRound(){
   guardian = {x:W/2-8*SC, y:guardianY, w:16*SC, h:guardianH, cd:0, SC};
 
   seeds=[]; sporeBolts=[]; pollenParticles=[]; spores=[];
-  if(!driftMotes) driftMotes=[];
   spreadDir=1; pulseFrame=0; boltCounter=0; pulseCounter=0;
 
   SPORE_SPEED   = 0.6 + roundNum*0.1;
@@ -206,15 +209,20 @@ setupMove('btnR','ArrowRight');
 
 function handleSow(e){
   if(e&&e.preventDefault)e.preventDefault();
+  ensureReady();
   if(!started){started=true;running=true;startLoop();return;}
   if(gameOver){init();started=true;running=true;startLoop();return;}
   sow();
 }
 document.getElementById('btnSow').addEventListener('mousedown',handleSow);
 document.getElementById('btnSow').addEventListener('touchstart',handleSow,{passive:false});
-document.addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space'){e.preventDefault();handleSow(e);}});
+document.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Space'){e.preventDefault();handleSow(e);}
+});
 document.addEventListener('keyup',e=>{keys[e.code]=false;});
 canvas.addEventListener('click',()=>{
+  ensureReady();
   if(!started){started=true;running=true;startLoop();}
   else if(gameOver){init();started=true;running=true;startLoop();}
 });
@@ -257,4 +265,125 @@ function update(){
     if(shooters.length>0){const s=shooters[Math.floor(Math.random()*shooters.length)];sporeBolts.push({x:s.x+s.w/2,y:s.y+s.h,phase:0});}
   }
 
-  sporeBolts=sporeBolts.filter(b=>b.y<H+10
+  sporeBolts=sporeBolts.filter(b=>b.y<H+10);
+  sporeBolts.forEach(b=>{b.y+=BOLT_SPEED;b.phase+=0.3;});
+
+  for(let bi=seeds.length-1;bi>=0;bi--){
+    const b=seeds[bi];
+    for(let ii=0;ii<spores.length;ii++){
+      const inv=spores[ii]; if(!inv.alive)continue;
+      if(b.x>=inv.x&&b.x<=inv.x+inv.w&&b.y>=inv.y&&b.y<=inv.y+inv.h){
+        inv.alive=false;seeds.splice(bi,1);pollen+=POLLEN_PTS[inv.type]*roundNum;
+        document.getElementById('pollenVal').textContent=pollen;
+        bloom(inv.x+inv.w/2,inv.y+inv.h/2,SPORE_COLORS[Math.min(inv.row,5)]);break;
+      }
+    }
+  }
+
+  for(let bi=sporeBolts.length-1;bi>=0;bi--){
+    const b=sporeBolts[bi];
+    if(b.x>=guardian.x&&b.x<=guardian.x+guardian.w&&b.y>=guardian.y&&b.y<=guardian.y+guardian.h){sporeBolts.splice(bi,1);wither();return;}
+  }
+
+  pollenParticles=pollenParticles.filter(p=>p.life>0);
+  pollenParticles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;});
+
+  driftMotes.forEach(m=>{m.y+=m.vy;m.x+=m.vx;if(m.y>H){m.y=-2;m.x=Math.random()*W;}if(m.x<0)m.x=W;if(m.x>W)m.x=0;});
+}
+
+function sow(){if(guardian.cd>0)return;seeds.push({x:guardian.x+guardian.w/2,y:guardian.y});guardian.cd=18;}
+function bloom(x,y,color){for(let i=0;i<10;i++){const a=Math.PI*2*i/10,sp=1+Math.random()*2;pollenParticles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:20+Math.random()*10,color,size:2+Math.floor(Math.random()*2)});}}
+function wither(){roots--;if(roots<=0){running=false;gameOver=true;stopLoop();updateHUD();draw();return;}seeds=[];sporeBolts=[];guardian.x=canvas.width/2-guardian.w/2;updateHUD();}
+
+function drawBackdrop(){
+  const W=canvas.width,H=canvas.height;
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#04140f');
+  grad.addColorStop(1,'#0a1f16');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+
+  // siluetas de plantas en los bordes
+  ctx.fillStyle='rgba(20,60,35,0.6)';
+  ctx.beginPath();
+  ctx.moveTo(0,H);
+  ctx.quadraticCurveTo(W*0.05,H*0.75,W*0.02,H*0.6);
+  ctx.quadraticCurveTo(W*0.1,H*0.7,W*0.12,H);
+  ctx.closePath();ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(W,H);
+  ctx.quadraticCurveTo(W*0.95,H*0.7,W*0.98,H*0.55);
+  ctx.quadraticCurveTo(W*0.9,H*0.68,W*0.88,H);
+  ctx.closePath();ctx.fill();
+
+  // motas de polen a la deriva
+  if(driftMotes) driftMotes.forEach(m=>{
+    ctx.fillStyle='rgba(255,230,179,0.5)';
+    ctx.beginPath();ctx.arc(m.x,m.y,m.r,0,Math.PI*2);ctx.fill();
+  });
+}
+
+function draw(){
+  const W=canvas.width,H=canvas.height;
+  drawBackdrop();
+
+  if(guardian){
+    spores.filter(i=>i.alive).forEach(inv=>{
+      const SC=guardian.SC||getScale();
+      const[s1,s2]=SPORE_SPRITES[inv.type];
+      drawSprite(pulseFrame===0?s1:s2,inv.x,inv.y,SC,SPORE_COLORS[Math.min(inv.row,5)]);
+    });
+
+    if(started&&!gameOver) drawSprite(GUARDIAN_SPRITE,guardian.x,guardian.y,guardian.SC||getScale(),'#8fdc7a');
+
+    ctx.fillStyle='#ffe6b3';ctx.shadowColor='#ffe6b3';ctx.shadowBlur=4;
+    seeds.forEach(b=>ctx.fillRect(b.x-1,b.y,3,8));ctx.shadowBlur=0;
+
+    ctx.fillStyle='#b46fe0';ctx.shadowColor='#b46fe0';ctx.shadowBlur=3;
+    sporeBolts.forEach(b=>ctx.fillRect(b.x+Math.sin(b.phase)*2-1,b.y,3,6));ctx.shadowBlur=0;
+
+    pollenParticles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/30);ctx.fillStyle=p.color;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);});
+    ctx.globalAlpha=1;
+  }
+
+  ctx.fillStyle='#8fdc7a';ctx.fillRect(0,H-4,W,2);
+
+  if(!started) overlay('EL JARDÍN DESPIERTA','TOCA PARA BROTAR','#8fdc7a');
+  else if(gameOver){
+    overlay('EL JARDÍN SE MARCHITA','POLEN: '+pollen,'#b46fe0');
+    if(Math.floor(Date.now()/500)%2===0){
+      ctx.fillStyle='#ffb347';
+      ctx.font=Math.max(8,Math.floor(W/36))+"px 'Trebuchet MS'";
+      ctx.textAlign='center';
+      ctx.fillText('TOCA PARA RENACER',W/2,H*0.72);
+      ctx.textAlign='left';
+    }
+  }
+}
+
+function overlay(title,sub,color){
+  const W=canvas.width,H=canvas.height;
+  ctx.fillStyle='rgba(4,20,15,0.85)';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=color;
+  ctx.font="bold "+Math.max(10,Math.floor(W/16))+"px 'Trebuchet MS'";
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(title,W/2,H*0.42);
+  ctx.fillStyle='#cfead0';
+  ctx.font=Math.max(8,Math.floor(W/32))+"px 'Trebuchet MS'";
+  ctx.fillText(sub,W/2,H*0.58);
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+}
+
+// Inicialización robusta: se dispara en load, y también como red de seguridad
+// si el evento load ya pasó o no llega a tiempo (común en algunos iframes).
+window.addEventListener('load', () => {
+  setTimeout(() => { ensureReady(); draw(); }, 100);
+});
+window.addEventListener('resize', () => { if(ready){ resize(); if (!running) draw(); } });
+
+// Red de seguridad adicional: si por algún motivo 'load' nunca llega
+// (algunos navegadores en iframes sandboxed), forzamos tras un pequeño delay.
+setTimeout(() => { ensureReady(); draw(); }, 300);
+</script>
+</body>
+</html>
