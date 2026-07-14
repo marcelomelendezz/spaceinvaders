@@ -374,16 +374,18 @@ function overlay(title,sub,color){
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
 }
 
-// Inicialización robusta: se dispara en load, y también como red de seguridad
-// si el evento load ya pasó o no llega a tiempo (común en algunos iframes).
-window.addEventListener('load', () => {
-  setTimeout(() => { ensureReady(); draw(); }, 100);
-});
-window.addEventListener('resize', () => { if(ready){ resize(); if (!running) draw(); } });
+// Inicialización inmediata: el script se ejecuta al final del <body>,
+// así que el DOM y el layout ya existen. No dependemos del evento 'load',
+// que en algunos iframes (sandboxed, embebidos en otros sitios) puede
+// retrasarse, no dispararse a tiempo, o comportarse distinto.
+ensureReady();
+draw();
 
-// Red de seguridad adicional: si por algún motivo 'load' nunca llega
-// (algunos navegadores en iframes sandboxed), forzamos tras un pequeño delay.
-setTimeout(() => { ensureReady(); draw(); }, 300);
+// Redes de seguridad adicionales por si el layout del contenedor
+// todavía no tenía su tamaño final en el primer frame.
+window.addEventListener('load', () => { resize(); if(!running) draw(); });
+window.addEventListener('resize', () => { resize(); if (!running) draw(); });
+setTimeout(() => { resize(); if(!running) draw(); }, 300);
 </script>
 </body>
 </html>
